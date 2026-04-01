@@ -48,7 +48,7 @@
     "type": "git",
     "url": "git+https://github.com/ramiidv/arca-mtxca.git"
   },
-  "homepage": "https://github.com/ramiidv/arca-mtxca#readme",
+  "homepage": "https://arca-sdk.dev/mtxca",
   "bugs": {
     "url": "https://github.com/ramiidv/arca-mtxca/issues"
   },
