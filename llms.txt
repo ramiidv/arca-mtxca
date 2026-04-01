@@ -1,0 +1,186 @@
+# @ramiidv/arca-mtxca
+
+> TypeScript SDK para el web service WSMTXCA de ARCA (ex AFIP) - Facturacion electronica con detalle de articulos
+
+## Instalacion
+
+```bash
+npm install @ramiidv/arca-mtxca
+```
+
+Requisitos: Node.js >= 18 (fetch nativo). ESM only.
+
+## Configuracion
+
+```typescript
+import { ArcaMtxca } from '@ramiidv/arca-mtxca';
+
+const mtxca = new ArcaMtxca({
+  cert: string,          // PEM X.509 certificate
+  key: string,           // PEM RSA private key
+  cuit: number,          // CUIT del contribuyente (ej: 20123456789)
+  production?: boolean,  // default: false (homologacion)
+  timeout?: number,      // default: 30000
+  retries?: number,      // default: 1
+  retryDelayMs?: number, // default: 1000
+  onEvent?: (event: ArcaEvent) => void,
+});
+```
+
+## WSMTXCA vs WSFEv1
+
+WSMTXCA: facturacion con detalle de articulos (arrayItems con codigo, descripcion, cantidad, precioUnitario, importeItem, codigoCondicionIVA, importeIVA por linea). Fechas en formato YYYY-MM-DD. Soporta tipos A, B, M. Protocolo SOAP Java.
+WSFEv1: facturacion sin detalle de items (solo subtotales globales de IVA). Fechas en formato YYYYMMDD. Soporta A, B, C, E, M, FCE. Protocolo SOAP .NET.
+
+## Metodos principales
+
+### autorizar(request: AutorizarRequest): Promise<MtxcaInvoiceResult>
+Autoriza un comprobante con detalle de articulos. Retorna CAE si aprobado. El request contiene ptoVta, cbteTipo, y un objeto invoice con concepto, docTipo, docNro, cbteFch (YYYY-MM-DD), importeTotal, items[], y campos opcionales (subtotalesIVA, otrosTributos, comprobanteAsociado, fechas de servicio).
+
+### ultimoComprobante(ptoVta: number, cbteTipo: number): Promise<number>
+Ultimo numero de comprobante autorizado.
+
+### siguienteComprobante(ptoVta: number, cbteTipo: number): Promise<number>
+Siguiente numero de comprobante (ultimo + 1).
+
+### consultarComprobante(cbteTipo: number, ptoVta: number, cbteNro: number): Promise<MtxcaComprobante>
+Consulta un comprobante previamente autorizado, incluyendo detalle de items.
+
+### status(): Promise<ServerStatus>
+Health check. No requiere autenticacion.
+
+### Parametros
+- getTiposComprobante(): Promise<ParamItem[]>
+- getTiposDocumento(): Promise<ParamItem[]>
+- getAlicuotasIVA(): Promise<ParamItem[]>
+- getCondicionesIVA(): Promise<ParamItem[]>
+- getMonedas(): Promise<MonedaItem[]>
+- getUnidadesMedida(): Promise<UnidadMedidaItem[]>
+- getPuntosVenta(): Promise<PtoVentaItem[]>
+- getPuntosVentaCAE(): Promise<PtoVentaItem[]>
+- getPuntosVentaCAEA(): Promise<PtoVentaItem[]>
+- getCotizacionMoneda(monedaId: string): Promise<CotizacionResult>
+
+## Tipos principales
+
+```typescript
+interface MtxcaItem {
+  codigo?: string;
+  descripcion: string;
+  cantidad: number;
+  unidadMedida: number;
+  precioUnitario: number;
+  importeItem: number;
+  codigoCondicionIVA: number;
+  importeIVA: number;
+  importeBonificacion?: number;
+}
+
+interface SubtotalIVA {
+  codigo: number;
+  baseImponible: number;
+  importe: number;
+}
+
+interface MtxcaInvoice {
+  concepto: number;
+  docTipo: number;
+  docNro: number;
+  cbteFch: string; // YYYY-MM-DD
+  items: MtxcaItem[];
+  importeTotal: number;
+  codigoMoneda?: string;
+  cotizacionMoneda?: number;
+  importeGravado?: number;
+  importeNoGravado?: number;
+  importeExento?: number;
+  subtotalesIVA?: SubtotalIVA[];
+  importeOtrosTributos?: number;
+  otrosTributos?: MtxcaTributo[];
+  comprobanteAsociado?: MtxcaComprobanteAsociado[];
+  fechaDesde?: string;
+  fechaHasta?: string;
+  fechaVtoPago?: string;
+  observaciones?: string;
+}
+
+interface AutorizarRequest {
+  ptoVta: number;
+  cbteTipo: number;
+  invoice: MtxcaInvoice;
+}
+
+interface MtxcaInvoiceResult {
+  resultado: string; // "A" or "R"
+  cae?: string;
+  caeFchVto?: string;
+  cbteNro: number;
+  observaciones: MtxcaObservacion[];
+  errores: MtxcaObservacion[];
+}
+
+interface MtxcaComprobante {
+  codigoTipoComprobante: number;
+  numeroPuntoVenta: number;
+  numeroComprobante: number;
+  fechaEmision: string;
+  codigoTipoDocumento: number;
+  numeroDocumento: number;
+  importeTotal: number;
+  importeNoGravado: number;
+  importeGravado: number;
+  importeExento: number;
+  importeOtrosTributos: number;
+  importeSubtotal: number;
+  codigoMoneda: string;
+  cotizacionMoneda: number;
+  resultado: string;
+  codigoAutorizacion?: string;
+  fechaVencimiento?: string;
+  observaciones: MtxcaObservacion[];
+  items: MtxcaItem[];
+}
+
+interface MtxcaObservacion { code: number; msg: string; }
+interface MtxcaTributo { codigoTributo: number; descripcion?: string; baseImponible: number; alicuota?: number; importe: number; }
+interface MtxcaComprobanteAsociado { codigoTipoComprobante: number; numeroPuntoVenta: number; numeroComprobante: number; cuit?: number; }
+interface ServerStatus { appserver: string; dbserver: string; authserver: string; }
+interface ParamItem { Id: number; Desc: string; FchDesde?: string; FchHasta?: string; }
+interface MonedaItem { Id: string; Desc: string; FchDesde?: string; FchHasta?: string; }
+interface UnidadMedidaItem { Id: number; Desc: string; FchDesde?: string; FchHasta?: string; }
+interface PtoVentaItem { Nro: number; EmisionTipo: string; Bloqueado: string; FchBaja: string; }
+interface CotizacionResult { monedaId: string; cotizacion: number; fechaCotizacion: string; }
+```
+
+## Errores
+
+4-class hierarchy from @ramiidv/arca-common:
+- ArcaError: base class
+- ArcaAuthError: WSAA authentication failures
+- ArcaServiceError: business errors from ARCA (has errors: {code: number, msg: string}[])
+- ArcaSoapError: HTTP/transport errors (has statusCode?: number)
+
+Note: autorizar() may return resultado="R" with errores/observaciones without throwing. Always check result.resultado.
+
+## Eventos
+
+Discriminated union types: auth:login, auth:cache-hit, request:start, request:end, request:retry, request:error.
+
+## Enums
+
+- CbteTipo: FACTURA_A=1, NOTA_DEBITO_A=2, NOTA_CREDITO_A=3, FACTURA_B=6, NOTA_DEBITO_B=7, NOTA_CREDITO_B=8, FACTURA_M=51, NOTA_DEBITO_M=52, NOTA_CREDITO_M=53
+- Concepto: PRODUCTOS=1, SERVICIOS=2, PRODUCTOS_Y_SERVICIOS=3
+- CodigoCondicionIVA: NO_GRAVADO=1, EXENTO=2, IVA_0=3, IVA_10_5=4, IVA_21=5, IVA_27=6, GRAVADO=7, IVA_5=8, IVA_2_5=9
+- Moneda: PESOS="PES", DOLARES="DOL", EUROS="060", etc.
+
+## Clientes de bajo nivel
+
+Accesibles como propiedades publicas: mtxca.wsaa (WsaaClient), mtxca.client (MtxcaClient).
+
+## SOAP details
+
+WSAA service name: wsmtxca
+Production: https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService
+Homologation: https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService
+Namespace: http://impl.service.wsmtxca.afip.gov.ar/
+Auth params use lowercase keys: token, sign, cuitRepresentada (wrapped in authRequest object).
